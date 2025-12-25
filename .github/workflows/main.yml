@@ -70,10 +70,10 @@ jobs:
         id: SDK
         uses: actions/cache@v5
         env:
-          cache-name: iOS-16.5-SDK
+          CACHE_NAME: iOS-16.5-SDK
         with:
           path: theos/sdks/
-          key: ${{ env.cache-name }}
+          key: ${{ env.CACHE_NAME }}
       
       - name: Download iOS 16.5 SDK
         if: steps.SDK.outputs.cache-hit != 'true'
@@ -119,7 +119,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/main
           sed -i '' "27s#.*#BUNDLE_ID = ${{ env.BUNDLE_ID }}#g" Makefile
-          sed -i '' "26s#.*#DISPLAY_NAME = ${{ env.APP_NAME }}#g" Makefile          
+          sed -i '' "26s#.*#DISPLAY_NAME = ${{ env.APP_NAME }}#g" Makefile
           make package THEOS_PACKAGE_SCHEME=rootless IPA=Payload/YouTube.app FINALPACKAGE=1
           echo "package=$(ls -t packages | head -n1)" >> $GITHUB_OUTPUT
           echo -e "==> \033[1mSHASUM256: $(shasum -a 256 packages/*.ipa | cut -f1 -d' ')\033[0m"
@@ -141,16 +141,22 @@ jobs:
           path: ${{ github.workspace }}/main/packages/${{ steps.build_package.outputs.package }}
           if-no-files-found: error
 
-      - name: Create Release
+      - name: Create GitHub Release
         id: create_release
-        uses: qnblackcat/action-gh-release@v1.0.0
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ steps.prepare_youtube.outputs.youtube_version }}-${{ inputs.uyou_version }}-(${{ github.run_number }})
+          release_name: v${{ steps.prepare_youtube.outputs.youtube_version }}-${{ inputs.uyou_version }}-(${{ github.run_number }})
+          draft: ${{ inputs.create_release }}
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UYOU_VERSION: ${{ inputs.uyou_version }}
-          YOUTUBE_VERSION: ${{ steps.prepare_youtube.outputs.youtube_version }}
-          DRAFT: ${{ inputs.create_release }}
+
+      - name: Upload IPA to Release
+        if: ${{ inputs.create_release }}
+        uses: actions/upload-release-asset@v1
         with:
-          tag_name: v${{ env.YOUTUBE_VERSION }}-${{ env.UYOU_VERSION }}-(${{ github.run_number }})
-          name: v${{ env.YOUTUBE_VERSION }}-${{ env.UYOU_VERSION }}-(${{ github.run_number }})
-          files: main/packages/*.ipa
-          draft: ${{ env.DRAFT }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.workspace }}/main/packages/${{ steps.build_package.outputs.package }}
+          asset_name: ${{ steps.build_package.outputs.package }}
+          asset_content_type: application/zip
